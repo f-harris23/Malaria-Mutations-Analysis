@@ -1,0 +1,154 @@
+---
+title: "Analysis of the surveyor database - focusing on molecular markers associated with Artemisinin and SP resistance across Africa."
+author: "Finlay Harris"
+date: "2026-07-03"
+output: 
+  html_document:
+    mathjax: default
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE)
+library(tidyverse)
+library(ggrepel)
+source("novartis_analysis.R")
+```
+
+
+## 1. Introduction
+This report was motivated by a publication produced by Eloff et al. (2025). The report examines molecular markers mentioned by Eloff et al. and extends on some of the points made in that paper. The pfk13 P441L candidate marker is particularly scrutinised, which was identified as having a high prevalence of 33.2% and also viewing and comparing levels of sulphadoxine-pyrimethamine resistance markers. The analysis was completed using the Novartis global malaria drug resistance surveillance database.
+
+## 2. Scientific Questions
+The report addresses the following questions:
+
+1. How does Namibia's artemisinin resistance profile compare to other African countries?
+2. Is there correlation between artemisinin and SP resistance across Africa?
+3. Does the west-to-east gradient of P441L reported by Eloff et al. still hold under the broader surveillance database?
+4. Where are the gaps in malaria drug resistance surveillance across Africa?
+
+## 3. Data Cleaning
+A brief summary of cleaning decisions applied to the Novartis data.
+
+- Columns converted to the appropriate types
+- "null" strings replaced with 'NA'
+- Rows with implausible years removed
+- Rows where tested = 0 removed
+- 12 rows where Present > Tested removed (most likely data entry errors)
+- 212 true duplicate rows removed
+- Missing location data for publication 296 added (Dande, Angola)
+
+## 4. Results
+### 4.1 Namibia in Global/Continental Context
+How does pfk13 P441L prevalence in Namibia compare to other countries globally? 
+
+```{r, fig.cap="Figure 1: P441L prevalence globally" }
+result %>%
+  ggplot(aes(x = reorder(Country, mean_prevalence), y = mean_prevalence)) +
+  geom_bar(stat = "identity", fill = "steelblue") + 
+  coord_flip() + 
+  labs(x = "Country", y = "Mean Prevalence (%)") 
+```
+Consistent with Eloff et al., we see that Namibia has the highest prevalence of pfk13 P441L, notably, there is prevalence of pfk13 P441L in Zambia and Angola which are neighboring countries of Namibia. Perhaps this is due to possible human movement between Namibia and its neighbours, and given that Zambia borders the Zambezi region which carries the highest prevalence of P441L per region in Namibia, it may be plausible to say that human movement may have contributed to appearances of P441L in Zambia.
+
+Figure 2 provides a geographic representation of P441L prevalence across Africa.
+```{r, fig.cap="Figure 2: P441L across Africa"}
+africa <- world %>%
+  filter(continent == "Africa") %>%
+  left_join(result, by = c("name" = "Country")) %>%
+  ggplot() +
+  geom_sf(aes(fill = mean_prevalence)) +
+  scale_fill_gradient(low = "yellow", high = "red", na.value = "grey90") +
+  coord_sf(xlim = c(0, 50), ylim = c(-35, 15)) +
+  theme_bw() +
+  labs(fill = "Mean Prevalence (%)")
+
+africa
+```
+The countries that have recorded P441L prevalence are highlighted on a colour gradient and countries with no P441L data highlighted in grey. As discussed in Eloff et al., malaria transmission has shifted from north-central Namibia to northeastern regions and that the high-risk groups to contraction are young men and travelers which consolidate the idea of cross-border movement and transmission between northern regions of Namibia and the countries Zambia and Angola.
+
+Figure 3 zooms into Namibia and specifically towards the northeastern regions to pinpoint exactly where high prevalence of P441L appears. The bubble map below depicts mean prevalence of P441L for each of the 5 study sites in northern Namibia.
+
+```{r, fig.cap="Figure 3: P441L prevalence in Namibia"}
+ggplot() +
+  geom_sf(data = namibia, fill = "grey95") +
+  geom_sf(data = namibia_lakes, fill = "lightblue", colour = "blue") +
+  geom_sf(data = namibia_rivers, colour = "dodgerblue", linewidth = 0.3) +
+  geom_point(data = namibia_p441l_summary,
+             aes(x = Longitude, y = Latitude, 
+                 fill = mean_prevalence,
+                 size = total_tested),
+             shape = 21, colour = "black") +
+  scale_fill_gradient(low = "yellow", high = "red") +
+  scale_size_continuous(range = c(3, 10)) +    geom_text_repel(data = namibia_p441l_summary,
+                aes(x = Longitude, y = Latitude,
+                    label = `Site Name`),
+                size = 2.24,
+                box.padding = 0.5)+
+  labs(fill = "Mean Prevalence (%)",
+       size = "Samples Tested")
+```
+Zambezi is the most prevalent region with $\approx31$% mean prevalence. It also has the largest number of samples in comparison to the other 4 sites. This cluster of prevalence in northern Namibia and especially Zambezi could further show some links between human movement. Eloff et al. also mentions a west-to-east increasing gradient of P441L for each of the 5 study sites above. We can verify this with a simpler method than Eloff et al. by using a Spearman's rank test. Instead of using raw prevalence data, the same subset was used in the test that was used to create Figure 2, this keeps it consistent. A comparison was also made to using raw prevalence values and using mean prevalence per site gives a stronger value for $\rho$ compared to raw prevalence ($\rho = 0.77$). Mean prevalence was used since Kavango East and Zambezi had 2 rows as entries compared to the other sites which had 1 row each, so this gives each site a fair weighting when analysing results.
+```{r}
+cor.test(~Longitude + mean_prevalence,
+         data = namibia_p441l_summary,
+         method = "spearman") 
+```
+From the result, we can see $\rho = 0.89$ and that the null hypothesis is rejected. This states that there is a strong positive association between longitude and P441L prevalence across study sites, this provides a stronger correlation compared to the results reported by Eloff et al. ($\rho = 0.77$, $p = 0.002$). One thing to mention is that, although my value of $p = 0.041$ is still significant at the 5% level, Eloff's publication value of $p = 0.002$ holds much more statistical power.
+
+### 4.2 Correlation between Artemisinin and SP resistance markers
+Eloff et al. reported high prevalence of both artemisinin (pfk13) and sulphadoxine-pyrimethamine (SP) partial resistance markers (pfdhfr/pfdhps). Notably, the publication does not formally examine any relationship between these two drug resistances. This analysis investigates whether areas with higher artemisinin resistance markers also tend to have higher SP resistance markers. For this study, only SNP's were included and wildtypes and copy number variants were excluded. Below is a interactive scatter plot overlayed with a regression line and its respective 95% confidence interval. Mean prevalence was calculated for each country rather than using raw prevalence since mean gives a fairer and a single representative value for each country.
+```{r, fig.cap="Figure 4: Artemisinin vs SP resistance (SNP only)"}
+africa_scatter <- ggplot(data = africa_combined, aes(x = art_prevalence, y = sp_prevalence)) +
+  geom_point_interactive( 
+    aes(colour = Country == "Namibia",
+        tooltip = Country,
+        data_id = Country),
+    size = 3) +
+  scale_colour_manual(values = c("grey50", "red"),
+                      labels = c("Other", "Namibia")) +
+  geom_smooth(method = "lm", se = TRUE, colour = "blue") +
+  labs(x = "Mean Artemisinin resistance prevalence (%)",
+       y = "Mean SP resistance prevalence (%)",
+       colour = "") +
+  theme_minimal()
+
+girafe(ggobj = africa_scatter)
+```
+Note that the regression line assumes linearity whereas the Spearman rank test used later on does not, it is to visualise any obvious correlation. We can see that Namibia (highlighted in red) almost sits on the regression line whereas most countries are scattered along the y-axis, implying that mean artemisinin prevalence for SNP mutants is low across Africa. 
+
+Following on from Figure 4, this was tested further using Spearman's ranked test since Spearman's rank test does not assume linearity nor normality in data, and is less sensitive to outliers compared to Pearson's test as it is clear from the figure above there are some possible outliers. Assuming a null hypothesis that there is no association between mean artemisinin and mean SP resistance prevalence, the test went as follows.
+```{r}
+cor.test(africa_combined$art_prevalence,
+         africa_combined$sp_prevalence,
+         method = "spearman")
+```
+The results show that the null hypothesis is rejected, there is association between artemisinin resistance and SP resistance markers. Note that wildtypes and copy number variants are not included in the data. We have $\rho = 0.397$ which indicates a weak positive correlation between the two drug resistances and a p-value of $p = 0.00757$ which is significant at the 1% level and above. Overall, this suggests there is some positive correlation between the two resistance types.
+
+### 4.3 Surveillance gaps in Africa
+To conclude the results section, Figure 5 depicts a choropleth map of Africa showing number of observations per country.
+```{r, fig.cap="Figure 5: Surveillance coverage map of Africa"}
+ggplot(data = surveillance) +
+  geom_sf(aes(fill = n)) +
+  scale_fill_gradient(low = "white", high = "darkblue",
+                      na.value = "grey") +
+  coord_sf(xlim = c(-20, 55), ylim = c(-37, 37)) +
+  theme_minimal() +
+  labs(fill = "Number of\nobservations",
+       caption = "Grey = no surveillance data")
+```
+From Figure 5, we see that West and Central African countries have sparse data. This has several implications for the analyses conducted here: these regions have high malaria burden, any resistance emerging there could go undetected, and also global resistance estimates are skewed towards well-surveilled countries. This also affects the analysis on Artemisinin vs SP resistance since the correlation was based on 44 African countries. Countries with no surveillance data were excluded entirely, if resistance is high in unsurveilled countries then the continental correlation may differ from what was observed previously. Several African countries had fewer than 10 observations in the database, meaning their prevalence estimates are based on limited data and should be interpreted cautiously. Small sample sizes reduce statistical power and increase uncertainty around prevalence estimates. Additionally, confidence intervals around prevalence estimates would be considerably wider for countries with few observations. It also may be the case that countries or regions with more developed surveillance infrastructure appear to have higher prevalence simply because they test more thoroughly, not because true prevalence is higher. By also considering Eloff et al. calling for routine, geographically representative molecular surveillance across southern Africa, the gaps shown by the analysis support this recommendation particularly in high-burden regions and countries with areas of known resistance and cross-border connectivity such as Namibia.
+
+## 5. Conclusion
+The key findings are summarised as follows. Firstly, we can see that Namibia is a clear outlier for artemisinin resistance compared to other African countries as shown in Figure 4, Namibia's outlier status for artemisinin resistance is consistent with Eloff et al., who attributed the high prevalence of resistance markers to several factors including low transmission intensity, reduced population immunity, high drug pressure relative to case numbers, and cross-border connectivity with neighbouring countries. These conditions may collectively favour the selection and spread of resistant parasites. Also, sulphadoxine-pyrimethamine (SP) resistance markers were detected in study sites in Namibia which suggests possible human movement and transmission between neighbouring countries which use SP as their first-line treatment method. There is weak-moderate positive correlation between artemisinin and SP resistance markers ($\rho = 0.397$) and P441L prevalence increases from west-to-east across Namibia ($\rho = 0.89$). The findings either replicate, add context, or extend on Eloff's publication. 
+
+However, there are some limitations with the data. For example, there were only 5 study sites throughout northern Namibia which limits statistical power. There is some surveillance bias, some countries have significantly more samples overall than others which may not be accurate and representative for each country. Mixed genotypes, wildtypes and copy number variants were not included in the data, which may skew results and cause inconsistencies. Only 2023 data was included for analysis of pfk13 P441L which limits temporal analysis. Finally, there may be markers used which are neither candidate nor validated resistance markers, access to a formal classification was unavailable.
+
+## References
+
+Eloff, L., Aranda-Díaz, A., Routledge, I., Wesolowski, A., Chisenga, M., 
+Mangena, B., Chimumbwa, J., Sikaala, C., Uusiku, P., Katokele, S., Raman, J., 
+Smith, J. and Mumbengegwi, D.R. (2025). High Prevalence of Molecular Markers 
+Associated with Artemisinin, Sulphadoxine and Pyrimethamine Resistance in 
+Northern Namibia. *medRxiv*. 
+https://doi.org/10.1101/2025.01.09.25320247 (This publication is a preprint, not peer-viewed)
