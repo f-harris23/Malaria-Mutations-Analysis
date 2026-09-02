@@ -23,10 +23,6 @@ No prior background in biology or malariology was required going in - this was a
 - **ggplot2** (and mapping extensions) for geographic and statistical visualisations
 - **RStudio + Git** for version control
 
-## Example outputs
-
-*(Add a screenshot or two here — e.g. the choropleth map and a correlation plot — to give viewers a 5-second sense of the output before they read further.)*
-
 ## Notes
 
 - Built and rendered locally in RStudio, with version control via Git/GitHub.
